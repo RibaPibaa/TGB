@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>💰 Coin Transfer Game</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+            background: rgba(255,255,255,0.1);
+            padding: 30px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .balance {
+            font-size: 28px;
+            margin: 20px 0;
+            font-weight: bold;
+        }
+        .player-id {
+            background: rgba(255,255,255,0.2);
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            word-break: break-all;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        input {
+            padding: 12px;
+            margin: 10px 0;
+            font-size: 16px;
+            border: none;
+            border-radius: 10px;
+            width: 100%;
+            box-sizing: border-box;
+            background: rgba(255,255,255,0.9);
+            color: #333;
+            text-align: center;
+        }
+        #status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            font-weight: bold;
+            min-height: 20px;
+        }
+        .success { background: rgba(76, 175, 80, 0.3); color: #4CAF50; }
+        .error { background: rgba(244, 67, 54, 0.3); color: #f44336; }
+        .info { background: rgba(33, 150, 243, 0.3); color: #2196F3; }
+        
+        .user-list {
+            margin-top: 20px;
+            text-align: left;
+        }
+        .user-item {
+            background: rgba(255,255,255,0.1);
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎮 Coin Transfer</h1>
+        
+        <div class="balance">
+            💰 Баланс: <span id="balance">15</span> монет
+        </div>
+        
+        <div>
+            <p>📋 Ваш ID для получения:</p>
+            <div class="player-id" id="playerId">Загрузка...</div>
+        </div>
+        
+        <div>
+            <input type="text" id="recipientId" placeholder="🔢 Введите ID получателя" oninput="checkRecipient()">
+            <div id="recipientInfo"></div>
+        </div>
+        
+        <div id="status"></div>
+
+        <div class="user-list">
+            <h3>👥 Игроки онлайн:</h3>
+            <div id="usersList"></div>
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        
+        let currentUser = {
+            id: '',
+            balance: 15
+        };
+        
+        // Генерируем уникальный ID для пользователя
+        function generateUserId() {
+            return 'USER_' + Math.random().toString(36).substring(2, 8).toUpperCase() + '_' + Date.now().toString(36);
+        }
+        
+        // Имитация базы данных пользователей
+        const usersDB = {
+            'USER_ABC123_1ZX9': { balance: 15, name: 'Игрок 1' },
+            'USER_DEF456_2YW8': { balance: 15, name: 'Игрок 2' },
+            'USER_GHI789_3XV7': { balance: 15, name: 'Игрок 3' },
+            'USER_JKL012_4WU6': { balance: 15, name: 'Игрок 4' },
+            'USER_MNO345_5VT5': { balance: 15, name: 'Игрок 5' }
+        };
+        
+        // Инициализация пользователя
+        function initUser() {
+            const savedUserId = localStorage.getItem('userId');
+            if (savedUserId && usersDB[savedUserId]) {
+                currentUser.id = savedUserId;
+            } else {
+                currentUser.id = generateUserId();
+                usersDB[currentUser.id] = { balance: 15, name: `Игрок ${Object.keys(usersDB).length + 1}` };
+                localStorage.setItem('userId', currentUser.id);
+            }
+            
+            currentUser.balance = usersDB[currentUser.id].balance;
+            document.getElementById('playerId').textContent = currentUser.id;
+            document.getElementById('balance').textContent = currentUser.balance;
+            
+            updateUsersList();
+        }
+        
+        // Проверка получателя
+        function checkRecipient() {
+            const recipientId = document.getElementById('recipientId').value.trim();
+            const recipientInfo = document.getElementById('recipientInfo');
+            const status = document.getElementById('status');
+            
+            status.innerHTML = '';
+            status.className = '';
+            
+            if (!recipientId) {
+                recipientInfo.innerHTML = '';
+                return;
+            }
+            
+            if (recipientId === currentUser.id) {
+                recipientInfo.innerHTML = '<div class="error">❌ Нельзя отправить себе</div>';
+                return;
+            }
+            
+            if (usersDB[recipientId]) {
+                recipientInfo.innerHTML = `<div class="success">✅ Игрок найден: ${usersDB[recipientId].name}</div>`;
+                
+                // АВТОМАТИЧЕСКАЯ ОТПРАВКА 10 МОНЕТ
+                setTimeout(() => {
+                    transferCoins(recipientId);
+                }, 1000);
+                
+            } else {
+                recipientInfo.innerHTML = '<div class="error">❌ Игрок не найден</div>';
+            }
+        }
+        
+        // Перевод монет
+        function transferCoins(recipientId) {
+            const amount = 10;
+            
+            if (currentUser.balance < amount) {
+                showStatus('❌ Недостаточно монет!', 'error');
+                return;
+            }
+            
+            if (!usersDB[recipientId]) {
+                showStatus('❌ Игрок не найден!', 'error');
+                return;
+            }
+            
+            // Обновляем балансы
+            currentUser.balance -= amount;
+            usersDB[currentUser.id].balance = currentUser.balance;
+            usersDB[recipientId].balance += amount;
+            
+            // Сохраняем в localStorage
+            localStorage.setItem('userId', currentUser.id);
+            
+            // Обновляем интерфейс
+            document.getElementById('balance').textContent = currentUser.balance;
+            document.getElementById('recipientId').value = '';
+            document.getElementById('recipientInfo').innerHTML = '';
+            
+            showStatus(`✅ Успешно отправлено ${amount} монет игроку ${usersDB[recipientId].name}!`, 'success');
+            updateUsersList();
+        }
+        
+        // Показать статус
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.innerHTML = message;
+            status.className = type;
+            
+            setTimeout(() => {
+                status.innerHTML = '';
+                status.className = '';
+            }, 5000);
+        }
+        
+        // Обновить список пользователей
+        function updateUsersList() {
+            const usersList = document.getElementById('usersList');
+            usersList.innerHTML = '';
+            
+            Object.keys(usersDB).forEach(userId => {
+                const user = usersDB[userId];
+                const userItem = document.createElement('div');
+                userItem.className = 'user-item';
+                userItem.innerHTML = `
+                    <span>${user.name}</span>
+                    <span>${userId === currentUser.id ? '👑 ' : ''}${user.balance} монет</span>
+                `;
+                usersList.appendChild(userItem);
+            });
+        }
+        
+        // Запуск при загрузке
+        document.addEventListener('DOMContentLoaded', function() {
+            initUser();
+            showStatus('🔍 Введите ID игрока - перевод произойдет автоматически!', 'info');
+        });
+    </script>
+</body>
+</html>
